@@ -79,6 +79,21 @@ namespace AgIO
         //First run
         private void FormLoop_Load(object sender, EventArgs e)
         {
+            if (RegistrySettings.profileLoadResult == AgLibrary.Settings.LoadResult.Failed)
+            {
+                TimedMessageBox(10000,
+                    "Profile Load Warning",
+                    "AgIO profile could not be fully loaded (file may be corrupt).\r\n" +
+                    "Current session is using defaults for missing/invalid values.");
+            }
+
+            if (RegistrySettings.profileLoadedFromBackup)
+            {
+                TimedMessageBox(10000,
+                    "Profile Recovery",
+                    "AgIO profile was recovered from .last backup because the main file was unreadable.");
+            }
+
             if (Settings.Default.setDisplay_StartMinimized)
             {
                 this.WindowState = FormWindowState.Minimized;
@@ -219,29 +234,10 @@ namespace AgIO
             //update Caster IP from URL, just use the old one if can't find
             if (isNTRIP_RequiredOn)
             {
-                //broadCasterIP = Properties.Settings.Default.setNTRIP_casterIP; //Select correct Address
                 broadCasterIP = null;
-                string actualIP = Properties.Settings.Default.setNTRIP_casterURL.Trim();
 
-                try
+                if (!ResolveCasterIP())
                 {
-                    IPAddress[] addresslist = Dns.GetHostAddresses(actualIP);
-                    foreach (IPAddress address in addresslist)
-                    {
-                        if (address.AddressFamily == AddressFamily.InterNetwork)
-                        {
-                            broadCasterIP = address.ToString().Trim();
-                            Properties.Settings.Default.setNTRIP_casterIP = broadCasterIP;
-                            Properties.Settings.Default.Save();
-                            break;
-                        }
-                    }
-
-                    if (broadCasterIP == null) throw new NullReferenceException();
-                }
-                catch (Exception ex)
-                {
-                    Log.EventWriter(ex.ToString());
                     TimedMessageBox(1500, "URL Not Located, Network Down?", "Cannot Find: " + Properties.Settings.Default.setNTRIP_casterURL);
                     //if we had a timer already, kill it
                     tmr?.Dispose();
@@ -305,7 +301,14 @@ namespace AgIO
             Settings.Default.setPort_wasMachineModuleConnected = wasMachineModuleConnectedLastRun;
             Settings.Default.setPort_wasRtcmConnected = wasRtcmConnectedLastRun;
 
-            Settings.Default.Save();
+            if (RegistrySettings.profileLoadResult == AgLibrary.Settings.LoadResult.Ok)
+            {
+                Settings.Default.Save();
+            }
+            else
+            {
+                Log.EventWriter($"AgIO profile save skipped: profile load state is {RegistrySettings.profileLoadResult}");
+            }
 
             isobusForm.StopAogTaskControllerProcess();
 
